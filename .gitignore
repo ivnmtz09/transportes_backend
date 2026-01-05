@@ -1,28 +1,37 @@
 # --------------------
-# Entorno Virtual
+# Entorno Virtual y Python
 # --------------------
-/venv/
+venv/
+env/
+ENV/
 __pycache__/
-*.pyc
+*.py[cod]
+*$py.class
 *.log
+.pytest_cache/
 
 # --------------------
-# Archivos de Django
+# Archivos de Django y Bases de Datos
 # --------------------
-# La base de datos SQLite3
 db.sqlite3
-
-# Archivos estáticos y de media subidos
+db.sqlite3-journal
 /static_collected/
 /media/
+# Ignorar archivos locales de configuración si existen
+backend/settings/local.py
 
-# Archivos de settings
-*.env
+# --------------------
+# Variables de Entorno y Secretos
+# --------------------
 .env
+*.env
 .flaskenv
+.python-version
 
 # --------------------
-# Claves Secretas
+# Otros (Editores y SO)
 # --------------------
-# Es donde guardaremos las variables de entorno
-/backend/settings/local.py # Si usan settings separadas
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
