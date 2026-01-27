@@ -32,6 +32,9 @@ class Trip(models.Model):
     
     vehicle_type = models.CharField(max_length=20, choices=VehicleType.choices, default=VehicleType.CAR)
     status = models.CharField(max_length=20, choices=Status.choices, default=Status.REQUESTED)
+    
+    estimated_price = models.DecimalField(max_digits=12, decimal_places=2, default=0, help_text="Precio estimado ofrecido por el cliente")
+    
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     

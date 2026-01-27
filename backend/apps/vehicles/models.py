@@ -47,6 +47,7 @@ class Vehicle(models.Model):
         help_text='Formato: ABC123 (carro) o ABC12D (moto)'
     )
     color = models.CharField(max_length=30)
+    is_active = models.BooleanField(default=False, help_text='Indica si este vehículo está activo para el conductor')
     
     def save(self, *args, **kwargs):
         # Asegurar que los campos se guarden en MAYÚSCULAS

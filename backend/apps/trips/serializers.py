@@ -7,18 +7,70 @@ class TripSerializer(serializers.ModelSerializer):
     driver_email = serializers.EmailField(source='driver.user.email', read_only=True, allow_null=True)
     service_type_display = serializers.CharField(source='get_service_type_display', read_only=True)
     
-    # Campos de geolocalización como lat/lng
-    pickup_latitude = serializers.FloatField(write_only=True, required=False)
-    pickup_longitude = serializers.FloatField(write_only=True, required=False)
-    destination_latitude = serializers.FloatField(write_only=True, required=False)
-    destination_longitude = serializers.FloatField(write_only=True, required=False)
+    # Campos de geolocalización como lat/lng obligatorios
+    pickup_latitude = serializers.FloatField(
+        write_only=True, 
+        required=True,
+        error_messages={'required': 'Falta la latitud de origen (pickup_latitude)'}
+    )
+    pickup_longitude = serializers.FloatField(
+        write_only=True, 
+        required=True,
+        error_messages={'required': 'Falta la longitud de origen (pickup_longitude)'}
+    )
+    destination_latitude = serializers.FloatField(
+        write_only=True, 
+        required=True,
+        error_messages={'required': 'Falta la latitud de destino (destination_latitude)'}
+    )
+    destination_longitude = serializers.FloatField(
+        write_only=True, 
+        required=True,
+        error_messages={'required': 'Falta la longitud de destino (destination_longitude)'}
+    )
     
     vehicle_type = serializers.ChoiceField(choices=Trip.VehicleType.choices, required=True)
+    
+    # Campo service_type con mapeo de español a inglés
+    service_type = serializers.CharField(
+        required=True,
+        error_messages={'required': 'El campo service_type es obligatorio (VIAJE/TRIP o DOMICILIO/DELIVERY)'}
+    )
+    
+    pickup_address = serializers.CharField(
+        required=True,
+        error_messages={'required': 'Falta la dirección de origen (pickup_address)'}
+    )
+    destination_address = serializers.CharField(
+        required=True,
+        error_messages={'required': 'Falta la dirección de destino (destination_address)'}
+    )
     
     class Meta:
         model = Trip
         fields = '__all__'
         read_only_fields = ('client', 'created_at', 'updated_at')
+    
+    def validate_service_type(self, value):
+        """
+        Mapea valores en español a los valores de la base de datos en inglés.
+        """
+        # Mapeo de español a inglés
+        mapping = {
+            'VIAJE': 'TRIP',
+            'DOMICILIO': 'DELIVERY',
+            'TRIP': 'TRIP',
+            'DELIVERY': 'DELIVERY'
+        }
+        
+        value_upper = value.upper().strip()
+        
+        if value_upper not in mapping:
+            raise serializers.ValidationError(
+                f"Valor inválido '{value}'. Debe ser: VIAJE/TRIP o DOMICILIO/DELIVERY"
+            )
+        
+        return mapping[value_upper]
     
     def create(self, validated_data):
         from django.contrib.gis.geos import Point
@@ -42,11 +94,44 @@ class TripSerializer(serializers.ModelSerializer):
         trip.save()
         
         # Crear automáticamente la tarifa inicial para el viaje
-        # La distancia se asume 0 por ahora o se puede calcular si se desea
-        Fare.objects.create(trip=trip)
+        # Usamos el estimated_price propuesto por el cliente como base
+        Fare.objects.create(
+            trip=trip, 
+            amount=trip.estimated_price,
+            base_fare=trip.estimated_price
+        )
         
         return trip
 
+
+    def update(self, instance, validated_data):
+        from django.contrib.gis.geos import Point
+        
+        # Extraer coordenadas si existen
+        pickup_lat = validated_data.pop('pickup_latitude', None)
+        pickup_lng = validated_data.pop('pickup_longitude', None)
+        dest_lat = validated_data.pop('destination_latitude', None)
+        dest_lng = validated_data.pop('destination_longitude', None)
+        
+        # Actualizar puntos de geolocalización
+        if pickup_lat is not None and pickup_lng is not None:
+            instance.origin_location = Point(pickup_lng, pickup_lat, srid=4326)
+        if dest_lat is not None and dest_lng is not None:
+            instance.destination_location = Point(dest_lng, dest_lat, srid=4326)
+            
+        # Actualizar el resto de campos
+        for attr, value in validated_data.items():
+            setattr(instance, attr, value)
+        
+        instance.save()
+        
+        # Sincronizar estimated_price con la Fare si ha cambiado
+        if 'estimated_price' in validated_data:
+            if hasattr(instance, 'fare'):
+                instance.fare.amount = instance.estimated_price
+                instance.fare.save()
+        
+        return instance
 
 class TripOfferSerializer(serializers.ModelSerializer):
     driver_name = serializers.CharField(source='driver.user.get_full_name', read_only=True)
@@ -111,7 +196,7 @@ class TripAvailableSerializer(serializers.ModelSerializer):
         model = Trip
         fields = (
             'id', 'client_name', 'pickup_address', 'destination_address', 
-            'fare_amount', 'vehicle_type', 'service_type', 'service_type_display', 'status', 'created_at'
+            'estimated_price', 'vehicle_type', 'service_type', 'service_type_display', 'status', 'created_at'
         )
 
 

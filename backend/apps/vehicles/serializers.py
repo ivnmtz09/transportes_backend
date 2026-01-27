@@ -17,7 +17,8 @@ class VehicleSerializer(serializers.ModelSerializer):
         model = Vehicle
         fields = '__all__'
         extra_kwargs = {
-            'license_plate': {'validators': []}  # Remove default UniqueValidator
+            'license_plate': {'validators': []},  # Remove default UniqueValidator
+            'is_active': {'required': False}
         }
     
     def create(self, validated_data):

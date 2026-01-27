@@ -5,23 +5,52 @@ User = get_user_model()
 
 class UserSerializer(serializers.ModelSerializer):
     vehicles = serializers.SerializerMethodField()
+    stats = serializers.SerializerMethodField()
+    is_admin = serializers.SerializerMethodField()
 
     class Meta:
         model = User
-        fields = ['id', 'username', 'email', 'first_name', 'last_name', 'role', 'password', 'profile_picture', 'phone_number', 'vehicles']
+        fields = [
+            'id', 'username', 'email', 'first_name', 'last_name', 
+            'role', 'password', 'profile_picture', 'phone_number', 
+            'vehicles', 'stats', 'is_admin'
+        ]
         extra_kwargs = {
             'password': {'write_only': True},
-            'role': {'required': False}  # Allow role to be editable
+            'role': {'required': False},
+            'phone_number': {'required': False},
+            'first_name': {'required': False},
+            'last_name': {'required': False}
         }
+
+    def get_is_admin(self, obj):
+        return obj.is_staff or obj.role == User.Role.ADMIN
 
     def get_vehicles(self, obj):
         """
-        Retorna la lista de vehículos si el usuario es un conductor.
+        Retorna la lista de vehículos si el usuario es un conductor o admin.
         """
-        if obj.role == User.Role.DRIVER:
+        if obj.role in [User.Role.DRIVER, User.Role.ADMIN]:
             from apps.vehicles.serializers import VehicleSerializer
+            # Si es admin, quizás quiera ver todos? Por ahora, los asociados.
             return VehicleSerializer(obj.vehicles.all(), many=True).data
         return []
+
+    def get_stats(self, obj):
+        """
+        Retorna estadísticas según el rol.
+        """
+        if obj.role in [User.Role.DRIVER, User.Role.ADMIN]:
+            # Por ahora devolvemos los datos estáticos solicitados
+            return {
+                "viajes_completados": 0,
+                "calificacion": 5.0
+            }
+        # Para CLIENT devolvemos ceros
+        return {
+            "viajes_completados": 0,
+            "calificacion": 0.0
+        }
 
     def create(self, validated_data):
         user = User.objects.create_user(**validated_data)

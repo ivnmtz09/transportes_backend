@@ -11,7 +11,7 @@ from .serializers import (
     TripAvailableSerializer
 )
 from .services import RouteService
-from apps.accounts.permissions import IsOwnerOrAdmin, IsClient, IsDriver
+from apps.accounts.permissions import IsOwnerOrAdmin, IsClient, IsDriver, IsAdmin
 
 
 class AvailableTripsView(generics.ListAPIView):
@@ -20,7 +20,7 @@ class AvailableTripsView(generics.ListAPIView):
     """
     queryset = Trip.objects.filter(status='REQUESTED', driver__isnull=True)
     serializer_class = TripAvailableSerializer
-    permission_classes = [permissions.IsAuthenticated, IsDriver]
+    permission_classes = [permissions.IsAuthenticated, (IsDriver | IsAdmin)]
 
 
 class TripViewSet(viewsets.ModelViewSet):
@@ -39,7 +39,7 @@ class TripViewSet(viewsets.ModelViewSet):
         user = self.request.user
         queryset = Trip.objects.all()
         
-        if hasattr(user, 'role') and user.role == 'DRIVER':
+        if hasattr(user, 'role') and user.role in ['DRIVER', 'ADMIN']:
             # Para conductores: mostrar viajes dentro de 5km de radio
             # Obtener la ubicación actual del conductor desde los parámetros
             driver_lat = self.request.query_params.get('lat')
@@ -71,7 +71,7 @@ class TripViewSet(viewsets.ModelViewSet):
         
         return queryset.distinct()
     
-    @action(detail=True, methods=['post'], permission_classes=[IsDriver])
+    @action(detail=True, methods=['post'], permission_classes=[(IsDriver | IsAdmin)])
     def offer(self, request, pk=None):
         """
         Endpoint para que un conductor haga una oferta en un viaje
@@ -180,8 +180,18 @@ class TripOfferViewSet(viewsets.ModelViewSet):
 
     def perform_create(self, serializer):
         # Al crear una oferta, asociamos automáticamente al conductor actual
-        if hasattr(self.request.user, 'driver_profile'):
-            serializer.save(driver=self.request.user.driver_profile)
+        user = self.request.user
+        if hasattr(user, 'driver_profile'):
+            serializer.save(driver=user.driver_profile)
+        elif user.role == 'ADMIN':
+            # Si es admin pero no tiene perfil, quizás deberíamos crearlo o error
+            # Por consistencia con la DB, necesita un DriverProfile
+            from apps.drivers.models import DriverProfile
+            profile, _ = DriverProfile.objects.get_or_create(
+                user=user,
+                defaults={'license_number': 'ADMIN', 'is_verified': True}
+            )
+            serializer.save(driver=profile)
         else:
             raise serializers.ValidationError({"error": "El usuario no tiene un perfil de conductor"})
     
